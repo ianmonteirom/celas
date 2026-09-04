@@ -188,7 +188,7 @@ var db = firebase.database();
 var REF = 'n7'; // caminho raiz no banco — pode mudar se quiser
 
 var CELLS = [
-  { id:'S-1',  status:'ok',   statusTxt:'ESTÁVEL',
+  { id:'S-1',  status:'ok',   statusTxt:'ESTÁVEL', gasAuto:true,
     info:'Contenção ativa. Dissociação temporal ativa — percebe eventos em múltiplos momentos simultaneamente.',
     warn:'' },
   { id:'S-2',  status:'ok',   statusTxt:'ESTÁVEL',
@@ -203,7 +203,7 @@ var CELLS = [
   { id:'S-5',  status:'warn', statusTxt:'ESPECIAL',
     info:'Histórico de morte e reanimação espontânea (Evento E-044). Protocolo de contenção em revisão.',
     warn:'Sujeito demonstrou capacidade de reanimação espontânea. Procedimentos padrão de emergência podem não ser aplicáveis.' },
-  { id:'S-6',  status:'ok',   statusTxt:'FECHADA',
+  { id:'S-6',  status:'ok',   statusTxt:'FECHADA', gasAuto:true,
     info:'Cela aberta.',
     warn:'' },
   { id:'S-7',  status:'unk',  statusTxt:'DESCONHECIDO',
@@ -215,7 +215,7 @@ var CELLS = [
   { id:'S-10', status:'ok',   statusTxt:'ESTÁVEL',
     info:'Contenção ativa. Comunicação mediúnica passiva (Morte). Sem risco de colapso. Cooperativo.',
     warn:'' },
-  { id:'S-11', status:'ok',   statusTxt:'FECHADA',
+  { id:'S-11', status:'ok',   statusTxt:'FECHADA', gasAuto:true,
     info:'Cela aberta.',
     warn:'' },
   { id:'S-V',  status:'lock', statusTxt:'BLOQUEADO', initialOpen:true,
@@ -245,12 +245,13 @@ db.ref('.info/connected').on('value', function(snap){
   }
 });
 
-// Pre-initialize gas for cells with permanent supply (S-6, S-11)
+// Pre-initialize gas for cells with permanent supply (S-1, S-6, S-11)
 db.ref(REF+'/gas').once('value', function(snap){
   var existing = snap.val() || {};
   var updates = {};
-  if(existing['S-6']  !== true) updates[REF+'/gas/S-6']  = true;
-  if(existing['S-11'] !== true) updates[REF+'/gas/S-11'] = true;
+  ['S-1','S-6','S-11'].forEach(function(id){
+    if(existing[id] !== true) updates[REF+'/gas/'+id] = true;
+  });
   if(Object.keys(updates).length) db.ref().update(updates);
 });
 
