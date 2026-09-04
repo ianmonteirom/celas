@@ -188,7 +188,7 @@ var db = firebase.database();
 var REF = 'n7'; // caminho raiz no banco — pode mudar se quiser
 
 var CELLS = [
-  { id:'S-1',  status:'ok',   statusTxt:'ESTÁVEL', gasAuto:true,
+  { id:'S-1',  status:'ok',   statusTxt:'ESTÁVEL',
     info:'Contenção ativa. Dissociação temporal ativa — percebe eventos em múltiplos momentos simultaneamente.',
     warn:'' },
   { id:'S-2',  status:'ok',   statusTxt:'ESTÁVEL',
@@ -203,7 +203,7 @@ var CELLS = [
   { id:'S-5',  status:'warn', statusTxt:'ESPECIAL',
     info:'Histórico de morte e reanimação espontânea (Evento E-044). Protocolo de contenção em revisão.',
     warn:'Sujeito demonstrou capacidade de reanimação espontânea. Procedimentos padrão de emergência podem não ser aplicáveis.' },
-  { id:'S-6',  status:'ok',   statusTxt:'FECHADA', gasAuto:true,
+  { id:'S-6',  status:'ok',   statusTxt:'FECHADA',
     info:'Cela aberta.',
     warn:'' },
   { id:'S-7',  status:'unk',  statusTxt:'DESCONHECIDO',
@@ -215,7 +215,7 @@ var CELLS = [
   { id:'S-10', status:'ok',   statusTxt:'ESTÁVEL',
     info:'Contenção ativa. Comunicação mediúnica passiva (Morte). Sem risco de colapso. Cooperativo.',
     warn:'' },
-  { id:'S-11', status:'ok',   statusTxt:'FECHADA', gasAuto:true,
+  { id:'S-11', status:'ok',   statusTxt:'FECHADA',
     info:'Cela aberta.',
     warn:'' },
   { id:'S-V',  status:'lock', statusTxt:'BLOQUEADO', initialOpen:true,
@@ -227,6 +227,7 @@ var MAX_OPENS = 5;
 var opens = 0;
 var openedCells = {};
 var gasResolved  = {};
+var gasData      = {};
 var currentCell  = null;
 
 // Pre-mark cells that start open
@@ -245,20 +246,16 @@ db.ref('.info/connected').on('value', function(snap){
   }
 });
 
-// Pre-initialize gas for cells with permanent supply (S-1, S-6, S-11)
-db.ref(REF+'/gas').once('value', function(snap){
-  var existing = snap.val() || {};
-  var updates = {};
-  ['S-1','S-6','S-11'].forEach(function(id){
-    if(existing[id] !== true) updates[REF+'/gas/'+id] = true;
-  });
-  if(Object.keys(updates).length) db.ref().update(updates);
-});
-
 // Gas states from sistema-gas.html
 db.ref(REF+'/gas').on('value', function(snap){
   gasResolved = snap.val() || {};
   renderGrid();
+});
+
+// Live gas readings from sistema-gas.html
+db.ref(REF+'/gasData').on('value', function(snap){
+  gasData = snap.val() || {};
+  updateGasReadings();
 });
 
 // Opened cells
@@ -358,12 +355,15 @@ function openModal(idx){
     mName.className='modal-name gas-name';
     mName.textContent='ACESSO BLOQUEADO';
     body.innerHTML=
-      '<div class="modal-gas-warning">CÓDIGO: ERR-CQ4-LOCK<br><br>'+
+      '<div class="modal-gas-warning">'+
+      'CÓDIGO: ERR-CQ4-LOCK<br><br>'+
       'STATUS: ATIVO<br>'+
-      'PRESSÃO: NOMINAL<br>'+
-      'FLUXO: NOMINAL<br><br>'+
+      '<span id="mgr-press">PRESSÃO: N/D</span><br>'+
+      '<span id="mgr-flux">FLUXO: N/D</span><br>'+
+      '<span id="mgr-lbl" style="font-style:italic;color:#ff6644"></span><br><br>'+
       'Interação com fechadura indisponível.</div>';
     actions.innerHTML='<button class="btn-cancel" style="flex:1" onclick="closeModal()">FECHAR</button>';
+    updateGasReadings();
     showModal(); return;
   }
 
@@ -388,6 +388,21 @@ function openModal(idx){
     '<button class="btn-cancel" onclick="closeModal()">CANCELAR</button>'+
     '<button class="btn-open" onclick="executeOpen()">ABRIR CONTENÇÃO</button>';
   showModal();
+}
+
+function updateGasReadings(){
+  if(currentCell===null) return;
+  var c = CELLS[currentCell];
+  var d = gasData[c.id];
+  var pEl = document.getElementById('mgr-press');
+  var fEl = document.getElementById('mgr-flux');
+  var lEl = document.getElementById('mgr-lbl');
+  if(!pEl) return;
+  if(d){
+    pEl.textContent = 'PRESSÃO: '+d.press+'%';
+    fEl.textContent = 'FLUXO: '+d.flux+'%';
+    if(lEl) lEl.textContent = d.lbl || '';
+  }
 }
 
 function executeOpen(){
