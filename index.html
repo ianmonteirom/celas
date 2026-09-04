@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DOSE N-7 — Sistema de Contenção</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #080808; min-height: 100vh; font-family: -apple-system, 'Segoe UI', sans-serif; color: #cccccc; }
+
+.topbar {
+  background: #1a1a1a; color: #888; padding: 12px 24px;
+  display: flex; align-items: center; justify-content: space-between;
+  font-family: 'Courier New', monospace; font-size: 13px; letter-spacing: 2px;
+}
+.conn-dot { width: 8px; height: 8px; border-radius: 50%; background: #444; display: inline-block; margin-right: 6px; transition: background .4s; }
+.conn-dot.ok  { background: #00cc44; }
+.conn-dot.err { background: #cc2200; }
+
+.counterbar {
+  background: #111111; border-bottom: 2px solid #222;
+  padding: 14px 24px; display: flex; align-items: center; gap: 20px;
+}
+.counter-label { font-size: 14px; color: #888; letter-spacing: 1px; }
+.counter-dots  { display: flex; gap: 8px; align-items: center; }
+.cdot { width: 15px; height: 15px; border-radius: 50%; background: #222; border: 2px solid #333; transition: all .3s; }
+.cdot.used { background: #cc2200; border-color: #aa1800; }
+.counter-num { font-size: 26px; font-weight: 700; color: #cc2200; font-family: 'Courier New', monospace; min-width: 40px; }
+.counter-num.full { color: #888; }
+
+.grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px; padding: 20px 24px; max-width: 1200px; margin: 0 auto;
+}
+
+.cell-card {
+  background: #111; border: 1px solid #222; border-radius: 8px;
+  padding: 16px 14px; display: flex; flex-direction: column; gap: 8px;
+  cursor: pointer; transition: box-shadow .15s, transform .12s, border-color .15s;
+  position: relative; overflow: hidden;
+}
+.cell-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.5); transform: translateY(-1px); }
+
+.cell-card.gas-active {
+  background: #120000; border-color: #5a0000; cursor: not-allowed;
+  animation: gasPulse 2.5s ease infinite;
+}
+.cell-card.gas-active:hover { transform: none; box-shadow: 0 0 10px rgba(180,0,0,.2); }
+@keyframes gasPulse { 0%,100%{border-color:#5a0000} 50%{border-color:#aa1100} }
+
+.cell-card.opened  { background: #0d0900; border-color: #cc8800; cursor: default; animation: none; }
+.cell-card.opened:hover  { transform: none; box-shadow: none; }
+.cell-card.blocked { background: #0d0d0d; border-color: #1a1a1a; opacity: .55; cursor: not-allowed; animation: none; }
+.cell-card.blocked:hover { transform: none; box-shadow: none; }
+
+.cell-id { font-size: 13px; font-weight: 700; color: #777; letter-spacing: 2px; font-family: 'Courier New', monospace; }
+.cell-status { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; margin-top: 2px; }
+.sdot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.sdot.ok   { background: #00cc44; }
+.sdot.warn { background: #cc8800; }
+.sdot.crit { background: #cc2200; }
+.sdot.unk  { background: #aaa; }
+.sdot.lock { background: #666; }
+.sdot.open { background: #cc8800; }
+.sdot.gas  { background: #cc2200; animation: dotPulse 1.2s ease infinite; }
+@keyframes dotPulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+.status-txt.ok   { color: #00cc44; }
+.status-txt.warn { color: #cc8800; }
+.status-txt.crit { color: #cc2200; }
+.status-txt.unk  { color: #666; }
+.status-txt.lock { color: #888; }
+.status-txt.open { color: #cc8800; }
+.status-txt.gas  { color: #cc2200; }
+
+.open-badge {
+  position: absolute; top: 10px; right: 10px;
+  background: #886600; color: #ffe066; border-radius: 20px;
+  font-size: 11px; font-weight: 700; padding: 3px 9px; letter-spacing: 1px;
+}
+.lock-badge {
+  position: absolute; top: 10px; right: 10px;
+  background: #666; color: #fff; border-radius: 20px;
+  font-size: 11px; font-weight: 700; padding: 3px 9px; letter-spacing: 1px;
+}
+.gas-badge {
+  position: absolute; top: 10px; right: 10px;
+  background: #7a0000; color: #ff8888; border-radius: 20px;
+  font-size: 11px; font-weight: 700; padding: 3px 9px; letter-spacing: 1px;
+}
+
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.75); z-index: 100;
+  align-items: center; justify-content: center; padding: 20px;
+}
+.modal-overlay.show { display: flex; }
+.modal { background: #111; border-radius: 10px; width: 100%; max-width: 460px; box-shadow: 0 20px 60px rgba(0,0,0,.3); overflow: hidden; }
+.modal-header { padding: 20px 22px 16px; border-bottom: 1px solid #222; display: flex; flex-direction: column; gap: 4px; }
+.modal-header.gas-header { border-bottom-color: #440000; background: #0d0000; }
+.modal-id { font-size: 13px; color: #888; letter-spacing: 3px; font-family: 'Courier New', monospace; }
+.modal-id.gas-id { color: #cc2200; }
+.modal-name { font-size: 20px; font-weight: 700; color: #cccccc; }
+.modal-name.gas-name { color: #cc2200; font-size: 16px; letter-spacing: 2px; }
+.modal-body { padding: 18px 22px; display: flex; flex-direction: column; gap: 12px; }
+.modal-info { font-size: 15px; color: #aaa; line-height: 1.6; background: #1a1a1a; border-radius: 6px; padding: 12px 14px; }
+.modal-warning { font-size: 14px; color: #cc2200; line-height: 1.6; background: #1a0500; border: 1px solid #441500; border-radius: 6px; padding: 12px 14px; }
+.modal-gas-warning {
+  font-size: 14px; color: #ff4444; line-height: 1.7; font-weight: 600;
+  background: #1a0000; border: 2px solid #880000; border-radius: 6px; padding: 14px; letter-spacing: 0.5px;
+}
+.modal-actions { padding: 14px 22px 20px; display: flex; gap: 10px; }
+.btn-cancel {
+  flex: 1; padding: 12px; background: #111111; border: 1px solid #222;
+  border-radius: 6px; font-size: 15px; font-weight: 600; color: #888; cursor: pointer; transition: background .15s;
+}
+.btn-cancel:hover { background: #080808; }
+.btn-open {
+  flex: 2; padding: 12px; background: #cc2200; border: none;
+  border-radius: 6px; font-size: 15px; font-weight: 700; color: #fff;
+  cursor: pointer; letter-spacing: 1px; transition: background .15s;
+}
+.btn-open:hover { background: #aa1800; }
+.blocked-msg { padding: 30px 22px; text-align: center; display: flex; flex-direction: column; gap: 12px; }
+.blocked-icon  { font-size: 44px; color: #555; }
+.blocked-title { font-size: 17px; font-weight: 700; color: #999; }
+.blocked-sub   { font-size: 14px; color: #666; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">D.O.S.E. — N-7 // SISTEMA DE CONTENÇÃO</div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <span><span class="conn-dot" id="connDot"></span><span id="connTxt" style="font-size:10px;letter-spacing:1px">CONECTANDO</span></span>
+    <span id="clock">--:--:--</span>
+  </div>
+</div>
+
+<div class="counterbar">
+  <div style="display:flex;align-items:center;gap:16px">
+    <div class="counter-label">ABERTURAS DE CONTENÇÃO</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="counter-num" id="counterNum">0</div>
+      <div style="font-size:14px;color:#aaa">/</div>
+      <div style="font-size:18px;color:#888;font-family:monospace;font-weight:700">5</div>
+    </div>
+    <div class="counter-dots">
+      <div class="cdot" id="cd0"></div><div class="cdot" id="cd1"></div>
+      <div class="cdot" id="cd2"></div><div class="cdot" id="cd3"></div>
+      <div class="cdot" id="cd4"></div>
+    </div>
+  </div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="modal-overlay" id="modalOverlay" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <div class="modal-header" id="mHeader">
+      <div class="modal-id"   id="mId"></div>
+      <div class="modal-name" id="mName"></div>
+    </div>
+    <div class="modal-body"    id="mBody"></div>
+    <div class="modal-actions" id="mActions"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// FIREBASE CONFIG — cole seu objeto firebaseConfig aqui
+// ============================================================
+var firebaseConfig = {
+  apiKey: "AIzaSyDufJ4tagEyi79LEdVKFz3joH2Jbas3tzM",
+  authDomain: "sistema-n7.firebaseapp.com",
+  databaseURL: "https://sistema-n7-default-rtdb.firebaseio.com",
+  projectId: "sistema-n7",
+  storageBucket: "sistema-n7.firebasestorage.app",
+  messagingSenderId: "818418177254",
+  appId: "1:818418177254:web:93bdc71cd1a22d25585727"
+};
+// ============================================================
+
+firebase.initializeApp(firebaseConfig);
+var db = firebase.database();
+var REF = 'n7'; // caminho raiz no banco — pode mudar se quiser
+
+var CELLS = [
+  { id:'S-1',  status:'ok',   statusTxt:'ESTÁVEL',
+    info:'Contenção ativa. Dissociação temporal ativa — percebe eventos em múltiplos momentos simultaneamente.',
+    warn:'' },
+  { id:'S-2',  status:'ok',   statusTxt:'ESTÁVEL',
+    info:'Contenção ativa. Transformação física progressiva (Sangue). Cooperativo. Regeneração ativa mesmo com CQ-4.',
+    warn:'' },
+  { id:'S-3',  status:'unk',  statusTxt:'DESCONHECIDO',
+    info:'CQ-4 NÍVEL 4 ATIVO. Estado catatônico. Dupla afinidade elemental (fenômeno não documentado). Transformação incompleta — CQ-4 é o único fator de contenção.',
+    warn:'' },
+  { id:'S-4',  status:'warn', statusTxt:'SEM CQ-4',
+    info:'Falha técnica — sem contenção química há 8+ dias. Descargas elétricas aumentando em frequência e intensidade.',
+    warn:'' },
+  { id:'S-5',  status:'warn', statusTxt:'ESPECIAL',
+    info:'Histórico de morte e reanimação espontânea (Evento E-044). Protocolo de contenção em revisão.',
+    warn:'Sujeito demonstrou capacidade de reanimação espontânea. Procedimentos padrão de emergência podem não ser aplicáveis.' },
+  { id:'S-6',  status:'ok',   statusTxt:'FECHADA',
+    info:'Cela aberta.',
+    warn:'' },
+  { id:'S-7',  status:'unk',  statusTxt:'DESCONHECIDO',
+    info:'Sem atualização de status há 8+ dias (desde incidente RCI-007). Elemento não confirmado.',
+    warn:'' },
+  { id:'S-8',  status:'unk',  statusTxt:'DESCONHECIDO', initialOpen:true,
+    info:'Cela aberta.',
+    warn:'' },
+  { id:'S-10', status:'ok',   statusTxt:'ESTÁVEL',
+    info:'Contenção ativa. Comunicação mediúnica passiva (Morte). Sem risco de colapso. Cooperativo.',
+    warn:'' },
+  { id:'S-11', status:'ok',   statusTxt:'FECHADA',
+    info:'Cela aberta.',
+    warn:'' },
+  { id:'S-V',  status:'lock', statusTxt:'BLOQUEADO', initialOpen:true,
+    info:'Cela aberta. Dispositivo PSM-1 em uso — sujeito sob contenção ativa.',
+    warn:'' }
+];
+
+var MAX_OPENS = 5;
+var opens = 0;
+var openedCells = {};
+var gasResolved  = {};
+var currentCell  = null;
+
+// Pre-mark cells that start open
+CELLS.forEach(function(c, i){ if(c.initialOpen) openedCells[i] = true; });
+
+// ── Firebase listeners ────────────────────────────────────────
+
+// Connection status
+db.ref('.info/connected').on('value', function(snap){
+  var dot = document.getElementById('connDot');
+  var txt = document.getElementById('connTxt');
+  if(snap.val()){
+    dot.className='conn-dot ok'; txt.textContent='ONLINE';
+  } else {
+    dot.className='conn-dot err'; txt.textContent='OFFLINE';
+  }
+});
+
+// Pre-initialize gas for cells with permanent supply (S-6, S-11)
+db.ref(REF+'/gas').once('value', function(snap){
+  var existing = snap.val() || {};
+  var updates = {};
+  if(existing['S-6']  !== true) updates[REF+'/gas/S-6']  = true;
+  if(existing['S-11'] !== true) updates[REF+'/gas/S-11'] = true;
+  if(Object.keys(updates).length) db.ref().update(updates);
+});
+
+// Gas states from sistema-gas.html
+db.ref(REF+'/gas').on('value', function(snap){
+  gasResolved = snap.val() || {};
+  renderGrid();
+});
+
+// Opened cells
+db.ref(REF+'/open').on('value', function(snap){
+  var data = snap.val() || {};
+  // Merge with initialOpen cells
+  CELLS.forEach(function(c, i){ if(c.initialOpen) openedCells[i] = true; });
+  Object.keys(data).forEach(function(k){ openedCells[parseInt(k)] = data[k]; });
+  renderGrid();
+});
+
+// Opens counter
+db.ref(REF+'/opens').on('value', function(snap){
+  opens = snap.val() || 0;
+  updateCounter();
+});
+
+// ── Counter UI ────────────────────────────────────────────────
+
+function updateCounter(){
+  document.getElementById('counterNum').textContent = opens;
+  document.getElementById('counterNum').className = 'counter-num' + (opens>=MAX_OPENS?' full':'');
+  for(var i=0;i<5;i++){
+    document.getElementById('cd'+i).className = 'cdot' + (i<opens?' used':'');
+  }
+}
+
+// ── Gas check ────────────────────────────────────────────────
+
+function isGasResolved(cell){
+  if(cell.gasAuto || cell.initialOpen) return true;
+  return gasResolved[cell.id] === true;
+}
+
+// ── Grid render ───────────────────────────────────────────────
+
+function renderGrid(){
+  var g = document.getElementById('grid');
+  g.innerHTML = '';
+  CELLS.forEach(function(c, idx){
+    var isOpen    = openedCells[idx];
+    var gasOk     = isGasResolved(c);
+    var isBlocked = !isOpen && opens>=MAX_OPENS;
+    var isGasLocked = !isOpen && !gasOk;
+
+    var cls='cell-card', badge='', sCls, sTxt;
+
+    if(isOpen){
+      cls+=' opened';
+      badge='<div class="open-badge">ABERTA</div>';
+      sCls='open'; sTxt='CELA ABERTA';
+    } else if(isBlocked){
+      cls+=' blocked';
+      badge='<div class="lock-badge">BLOQUEADO</div>';
+      sCls='lock'; sTxt='PROTOCOLO ATIVO';
+    } else if(isGasLocked){
+      cls+=' gas-active';
+      badge='<div class="gas-badge">⬤ GÁS ATIVO</div>';
+      sCls='gas'; sTxt='SISTEMA DE GÁS ATIVO';
+    } else {
+      sCls=c.status; sTxt=c.statusTxt;
+    }
+
+    var card = document.createElement('div');
+    card.className = cls;
+    if(!isOpen && !isBlocked) card.onclick = (function(i){ return function(){ openModal(i); }; })(idx);
+    card.innerHTML =
+      '<div class="cell-id">'+c.id+'</div>'+
+      '<div class="cell-status"><div class="sdot '+sCls+'"></div><span class="status-txt '+sCls+'">'+sTxt+'</span></div>'+
+      badge;
+    g.appendChild(card);
+  });
+}
+
+// ── Modal ─────────────────────────────────────────────────────
+
+function openModal(idx){
+  var c = CELLS[idx];
+  if(openedCells[idx]) return;
+  currentCell = idx;
+
+  var gasOk = isGasResolved(c);
+  var isBlocked = opens >= MAX_OPENS;
+
+  var header  = document.getElementById('mHeader');
+  var mId     = document.getElementById('mId');
+  var mName   = document.getElementById('mName');
+  var body    = document.getElementById('mBody');
+  var actions = document.getElementById('mActions');
+  header.className='modal-header'; mId.className='modal-id'; mName.className='modal-name';
+  body.innerHTML=''; actions.innerHTML='';
+
+  if(!gasOk){
+    header.className='modal-header gas-header';
+    mId.className='modal-id gas-id';
+    mId.textContent = c.id+' — SISTEMA CQ-4';
+    mName.className='modal-name gas-name';
+    mName.textContent='ACESSO BLOQUEADO';
+    body.innerHTML=
+      '<div class="modal-gas-warning">CÓDIGO: ERR-CQ4-LOCK<br><br>'+
+      'STATUS: ATIVO<br>'+
+      'PRESSÃO: NOMINAL<br>'+
+      'FLUXO: NOMINAL<br><br>'+
+      'Interação com fechadura indisponível.</div>';
+    actions.innerHTML='<button class="btn-cancel" style="flex:1" onclick="closeModal()">FECHAR</button>';
+    showModal(); return;
+  }
+
+  mId.textContent   = c.id+' — FICHA DE CONTENÇÃO';
+  mName.textContent = c.id;
+
+  if(isBlocked){
+    body.innerHTML=
+      '<div class="blocked-msg">'+
+      '<div class="blocked-icon">🔒</div>'+
+      '<div class="blocked-title">PROTOCOLO DE SEGURANÇA ATIVO</div>'+
+      '<div class="blocked-sub">Limite de aberturas simultâneas atingido (5/5).<br>O sistema de contenção de corredor foi ativado automaticamente.</div>'+
+      '</div>';
+    actions.innerHTML='<button class="btn-cancel" style="flex:1" onclick="closeModal()">FECHAR</button>';
+    showModal(); return;
+  }
+
+  body.innerHTML =
+    '<div class="modal-info">'+c.info+'</div>'+
+    (c.warn?'<div class="modal-warning">'+c.warn+'</div>':'');
+  actions.innerHTML =
+    '<button class="btn-cancel" onclick="closeModal()">CANCELAR</button>'+
+    '<button class="btn-open" onclick="executeOpen()">ABRIR CONTENÇÃO</button>';
+  showModal();
+}
+
+function executeOpen(){
+  if(currentCell===null) return;
+  var newOpens = opens + 1;
+  // Write to Firebase — all clients update via listener
+  db.ref(REF+'/open/'+currentCell).set(true);
+  db.ref(REF+'/opens').set(newOpens);
+  closeModal();
+}
+
+function showModal(){ document.getElementById('modalOverlay').classList.add('show'); }
+function closeModal(){ document.getElementById('modalOverlay').classList.remove('show'); currentCell=null; }
+function closeModalOutside(e){ if(e.target===document.getElementById('modalOverlay')) closeModal(); }
+
+// ── Clock ─────────────────────────────────────────────────────
+
+function tick(){
+  var d=new Date(), p=function(n){return n<10?'0'+n:n;};
+  document.getElementById('clock').textContent=p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
+  setTimeout(tick,1000);
+}
+tick();
+renderGrid();
+</script>
+</body>
+</html>
