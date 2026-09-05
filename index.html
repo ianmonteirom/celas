@@ -228,6 +228,22 @@ var opens = 0;
 var openedCells = {};
 var gasResolved  = {};
 var gasData      = {};
+
+// ── BroadcastChannel + localStorage — recebe em tempo real do sistema-gas ──
+var gasChannel;
+try { gasChannel = new BroadcastChannel('n7-gas'); } catch(e){}
+if(gasChannel){
+  gasChannel.onmessage = function(e){
+    var msg = e.data;
+    if(msg.type==='resolved'){
+      gasResolved[msg.id] = true;
+      renderGrid();
+    } else if(msg.type==='gasData'){
+      gasData[msg.id] = {press:msg.press, flux:msg.flux, lbl:msg.lbl};
+      updateGasReadings();
+    }
+  };
+}
 var currentCell  = null;
 
 // Pre-mark cells that start open
@@ -287,7 +303,9 @@ function updateCounter(){
 
 function isGasResolved(cell){
   if(cell.gasAuto || cell.initialOpen) return true;
-  return gasResolved[cell.id] === true;
+  if(gasResolved[cell.id] === true) return true;
+  try { if(localStorage.getItem('n7-gas-'+cell.id)==='true') return true; } catch(e){}
+  return false;
 }
 
 // ── Grid render ───────────────────────────────────────────────
