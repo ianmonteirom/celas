@@ -262,9 +262,10 @@ db.ref('.info/connected').on('value', function(snap){
   }
 });
 
-// Gas states from sistema-gas.html
+// Gas states from sistema-gas.html (merge — não sobrescreve estado local)
 db.ref(REF+'/gas').on('value', function(snap){
-  gasResolved = snap.val() || {};
+  var data = snap.val() || {};
+  Object.keys(data).forEach(function(k){ if(data[k]) gasResolved[k] = true; });
   renderGrid();
 });
 
@@ -274,19 +275,20 @@ db.ref(REF+'/gasData').on('value', function(snap){
   updateGasReadings();
 });
 
-// Opened cells
+// Opened cells (merge — não sobrescreve aberturas locais)
 db.ref(REF+'/open').on('value', function(snap){
   var data = snap.val() || {};
-  // Merge with initialOpen cells
   CELLS.forEach(function(c, i){ if(c.initialOpen) openedCells[i] = true; });
-  Object.keys(data).forEach(function(k){ openedCells[parseInt(k)] = data[k]; });
+  try { CELLS.forEach(function(c, i){ if(localStorage.getItem('n7-open-'+i)==='true') openedCells[i]=true; }); } catch(e){}
+  Object.keys(data).forEach(function(k){ if(data[k]) openedCells[parseInt(k)] = true; });
   renderGrid();
 });
 
-// Opens counter
+// Opens counter (usa o maior valor entre Firebase e local)
 db.ref(REF+'/opens').on('value', function(snap){
-  opens = snap.val() || 0;
-  updateCounter();
+  var fbOpens = snap.val() || 0;
+  try { var local = parseInt(localStorage.getItem('n7-opens'))||0; if(local>fbOpens) fbOpens=local; } catch(e){}
+  if(fbOpens > opens) { opens = fbOpens; updateCounter(); }
 });
 
 // ── Counter UI ────────────────────────────────────────────────
@@ -424,11 +426,18 @@ function updateGasReadings(){
 
 function executeOpen(){
   if(currentCell===null) return;
+  var idx = currentCell;
   var newOpens = opens + 1;
-  // Write to Firebase — all clients update via listener
-  db.ref(REF+'/open/'+currentCell).set(true);
-  db.ref(REF+'/opens').set(newOpens);
+  // Atualização local imediata (não depende do Firebase)
+  openedCells[idx] = true;
+  opens = newOpens;
+  updateCounter();
   closeModal();
+  renderGrid();
+  // Persistência (Firebase + localStorage)
+  db.ref(REF+'/open/'+idx).set(true);
+  db.ref(REF+'/opens').set(newOpens);
+  try { localStorage.setItem('n7-open-'+idx,'true'); localStorage.setItem('n7-opens',String(newOpens)); } catch(e){}
 }
 
 function showModal(){ document.getElementById('modalOverlay').classList.add('show'); }
