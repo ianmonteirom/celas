@@ -275,20 +275,18 @@ db.ref(REF+'/gasData').on('value', function(snap){
   updateGasReadings();
 });
 
-// Opened cells (merge — não sobrescreve aberturas locais)
+// Opened cells
 db.ref(REF+'/open').on('value', function(snap){
   var data = snap.val() || {};
   CELLS.forEach(function(c, i){ if(c.initialOpen) openedCells[i] = true; });
-  try { CELLS.forEach(function(c, i){ if(localStorage.getItem('n7-open-'+i)==='true') openedCells[i]=true; }); } catch(e){}
   Object.keys(data).forEach(function(k){ if(data[k]) openedCells[parseInt(k)] = true; });
   renderGrid();
 });
 
-// Opens counter (usa o maior valor entre Firebase e local)
+// Opens counter
 db.ref(REF+'/opens').on('value', function(snap){
-  var fbOpens = snap.val() || 0;
-  try { var local = parseInt(localStorage.getItem('n7-opens'))||0; if(local>fbOpens) fbOpens=local; } catch(e){}
-  if(fbOpens > opens) { opens = fbOpens; updateCounter(); }
+  var v = snap.val() || 0;
+  if(v !== opens){ opens = v; updateCounter(); }
 });
 
 // ── Counter UI ────────────────────────────────────────────────
@@ -305,9 +303,7 @@ function updateCounter(){
 
 function isGasResolved(cell){
   if(cell.gasAuto || cell.initialOpen) return true;
-  if(gasResolved[cell.id] === true) return true;
-  try { if(localStorage.getItem('n7-gas-'+cell.id)==='true') return true; } catch(e){}
-  return false;
+  return gasResolved[cell.id] === true;
 }
 
 // ── Grid render ───────────────────────────────────────────────
@@ -428,16 +424,17 @@ function executeOpen(){
   if(currentCell===null) return;
   var idx = currentCell;
   var newOpens = opens + 1;
-  // Atualização local imediata (não depende do Firebase)
+  // Optimistic local update (UX imediato)
   openedCells[idx] = true;
   opens = newOpens;
   updateCounter();
   closeModal();
   renderGrid();
-  // Persistência (Firebase + localStorage)
-  db.ref(REF+'/open/'+idx).set(true);
-  db.ref(REF+'/opens').set(newOpens);
-  try { localStorage.setItem('n7-open-'+idx,'true'); localStorage.setItem('n7-opens',String(newOpens)); } catch(e){}
+  // Firebase — propaga para todos os clientes
+  db.ref(REF+'/open/'+idx).set(true)
+    .catch(function(e){ console.error('[N7] Firebase ERRO open/'+idx, e.message); });
+  db.ref(REF+'/opens').set(newOpens)
+    .catch(function(e){ console.error('[N7] Firebase ERRO opens', e.message); });
 }
 
 function showModal(){ document.getElementById('modalOverlay').classList.add('show'); }
