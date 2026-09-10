@@ -127,6 +127,15 @@ body { background: #080808; min-height: 100vh; font-family: -apple-system, 'Sego
 .blocked-icon  { font-size: 44px; color: #555; }
 .blocked-title { font-size: 17px; font-weight: 700; color: #999; }
 .blocked-sub   { font-size: 14px; color: #666; line-height: 1.6; }
+
+#fb-toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: #001a0a; border: 1px solid #00aa44; color: #00cc55;
+  font-family: 'Courier New', monospace; font-size: 12px; letter-spacing: 2px;
+  padding: 10px 20px; border-radius: 4px; z-index: 9999;
+  opacity: 0; transition: opacity .3s; pointer-events: none;
+}
+#fb-toast.show { opacity: 1; }
 </style>
 </head>
 <body>
@@ -157,6 +166,7 @@ body { background: #080808; min-height: 100vh; font-family: -apple-system, 'Sego
 </div>
 
 <div class="grid" id="grid"></div>
+<div id="fb-toast"></div>
 
 <div class="modal-overlay" id="modalOverlay" onclick="closeModalOutside(event)">
   <div class="modal">
@@ -263,10 +273,30 @@ db.ref('.info/connected').on('value', function(snap){
   }
 });
 
+// Toast de feedback Firebase
+var toastTimer;
+function showToast(msg){
+  var el = document.getElementById('fb-toast');
+  if(!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ el.classList.remove('show'); }, 3000);
+}
+
 // Gas states from sistema-gas.html (merge — não sobrescreve estado local)
+var gasFirstLoad = true;
 db.ref(REF+'/gas').on('value', function(snap){
   var data = snap.val() || {};
-  Object.keys(data).forEach(function(k){ if(data[k]) gasResolved[k] = true; });
+  var updated = [];
+  Object.keys(data).forEach(function(k){
+    if(data[k] && !gasResolved[k]){
+      gasResolved[k] = true;
+      if(!gasFirstLoad) updated.push(k);
+    }
+  });
+  gasFirstLoad = false;
+  if(updated.length > 0) showToast('✓ GÁS NEUTRALIZADO: ' + updated.join(', '));
   renderGrid();
 });
 
