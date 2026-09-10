@@ -136,6 +136,7 @@ body { background: #080808; min-height: 100vh; font-family: -apple-system, 'Sego
   <div style="display:flex;align-items:center;gap:12px">
     <span><span class="conn-dot" id="connDot"></span><span id="connTxt" style="font-size:10px;letter-spacing:1px">CONECTANDO</span></span>
     <span id="clock">--:--:--</span>
+    <button onclick="resetSistema()" style="font-size:9px;letter-spacing:1px;padding:4px 10px;background:transparent;border:1px solid #441111;color:#883333;cursor:pointer;font-family:monospace">RESET</button>
   </div>
 </div>
 
@@ -438,6 +439,19 @@ function executeOpen(){
 }
 
 function showModal(){ document.getElementById('modalOverlay').classList.add('show'); }
+
+function resetSistema(){
+  if(!confirm('Resetar todo o sistema? Isso apaga aberturas e estado do gás.')) return;
+  db.ref(REF).remove().then(function(){
+    if(gasChannel) gasChannel.postMessage({type:'reset'});
+    location.reload();
+  }).catch(function(e){
+    console.error('[N7] Reset ERRO', e.message);
+    // reset local mesmo sem Firebase
+    if(gasChannel) gasChannel.postMessage({type:'reset'});
+    location.reload();
+  });
+}
 function closeModal(){ document.getElementById('modalOverlay').classList.remove('show'); currentCell=null; }
 function closeModalOutside(e){ if(e.target===document.getElementById('modalOverlay')) closeModal(); }
 
